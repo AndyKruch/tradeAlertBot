@@ -1,0 +1,21 @@
+# Виртуальное окружение
+venv/
+env/
+ENV/
+
+# Файлы конфигурации с секретами
+config.py
+.env
+secrets.ini
+*.key
+
+# Кеши Python
+__pycache__/
+*.pyc
+
+# Папки IDE
+.idea/
+.vscode/
+
+# Логи
+*.log
