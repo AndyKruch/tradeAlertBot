@@ -1,8 +1,9 @@
 # analyzers/level_analyzer.py
-from typing import List, Dict, Tuple
+from datetime import datetime, timezone
+from typing import List, Dict, Tuple, Optional
 import numpy as np
 from models import PriceLevel
-from datetime import datetime, timezone
+
 
 class LevelAnalyzer:
     """Анализатор уровней поддержки и сопротивления"""
@@ -23,11 +24,13 @@ class LevelAnalyzer:
 
     def _find_levels(self, candles: List[Dict], price_key: str,
                      level_type: str, current_price: float) -> List[PriceLevel]:
+        # Получаем список экстремумов: (цена, время)
         extremums = self._find_local_extremums(candles, price_key, level_type)
+        # Кластеризуем: возвращает список (цена, количество, среднее расстояние, стд, время_последнего)
         clusters = self._cluster_extremums_with_min_distance(extremums, current_price, level_type)
 
         levels = []
-        for cluster_price, count, avg_distance, cluster_std in clusters:
+        for cluster_price, count, avg_distance, cluster_std, last_time in clusters:
             strength = self._calculate_level_strength(count, avg_distance,
                                                       cluster_price, current_price, level_type,
                                                       cluster_std)
@@ -37,7 +40,8 @@ class LevelAnalyzer:
                 time_frame="5min",
                 touches=count,
                 is_fresh=True,
-                created_time=datetime.now(timezone.utc)  # нужно импортировать datetime
+                created_time=last_time,  # используем реальное время последнего экстремума в кластере
+                last_touch_time=last_time  # также можно установить последнее касание
             )
             levels.append(level)
 
@@ -45,10 +49,12 @@ class LevelAnalyzer:
         return levels[:5]
 
     def _find_local_extremums(self, candles: List[Dict], price_key: str,
-                              level_type: str) -> List[float]:
+                              level_type: str) -> List[Tuple[float, datetime]]:
+        """Возвращает список (цена, время) для локальных экстремумов"""
         extremums = []
         for i in range(self.window_size, len(candles) - self.window_size):
             current_price = candles[i][price_key]
+            current_time = candles[i]['time']
             is_extremum = True
             for j in range(i - self.window_size, i + self.window_size + 1):
                 if j != i and 0 <= j < len(candles):
@@ -61,59 +67,67 @@ class LevelAnalyzer:
                             is_extremum = False
                             break
             if is_extremum:
-                extremums.append(current_price)
+                extremums.append((current_price, current_time))
         return extremums
 
-    def _cluster_extremums_with_min_distance(self, extremums: List[float], current_price: float,
-                                             level_type: str) -> List[Tuple[float, int, float, float]]:
+    def _cluster_extremums_with_min_distance(self, extremums: List[Tuple[float, datetime]], current_price: float,
+                                             level_type: str) -> List[Tuple[float, int, float, float, datetime]]:
+        """Кластеризует экстремумы с учётом времени; возвращает (цена, количество, среднее расстояние, стд, последнее время)"""
         if not extremums:
             return []
 
-        filtered_extremums = []
-        for price in extremums:
+        # Фильтруем по расстоянию от текущей цены
+        filtered = []
+        for price, ts in extremums:
             distance_pct = abs(price - current_price) / current_price * 100 if current_price > 0 else 100
             if distance_pct < 10:
-                filtered_extremums.append(price)
+                filtered.append((price, ts))
 
-        if not filtered_extremums:
+        if not filtered:
             return []
 
-        sorted_prices = sorted(filtered_extremums)
+        # Сортируем по цене
+        sorted_items = sorted(filtered, key=lambda x: x[0])
         clusters = []
-        current_cluster = []
+        current_cluster = [sorted_items[0]]
 
-        for price in sorted_prices:
-            if not current_cluster:
-                current_cluster.append(price)
+        for price, ts in sorted_items[1:]:
+            avg_price = sum(p for p, _ in current_cluster) / len(current_cluster)
+            if abs(price - avg_price) / avg_price < 0.0025:
+                current_cluster.append((price, ts))
             else:
-                avg_price = sum(current_cluster) / len(current_cluster)
-                if abs(price - avg_price) / avg_price < 0.0025:
-                    current_cluster.append(price)
-                else:
-                    if len(current_cluster) >= 2:
-                        cluster_price = sum(current_cluster) / len(current_cluster)
-                        avg_distance = sum(abs(p - cluster_price) for p in current_cluster) / len(current_cluster)
-                        cluster_std = np.std(current_cluster) if len(current_cluster) > 1 else 0
-                        clusters.append((cluster_price, len(current_cluster), avg_distance, cluster_std))
-                    current_cluster = [price]
+                if len(current_cluster) >= 2:
+                    cluster_prices = [p for p, _ in current_cluster]
+                    cluster_times = [ts for _, ts in current_cluster]
+                    cluster_price = sum(cluster_prices) / len(cluster_prices)
+                    avg_distance = sum(abs(p - cluster_price) for p in cluster_prices) / len(cluster_prices)
+                    cluster_std = np.std(cluster_prices) if len(cluster_prices) > 1 else 0
+                    last_time = max(cluster_times)  # самое позднее время в кластере
+                    clusters.append((cluster_price, len(current_cluster), avg_distance, cluster_std, last_time))
+                current_cluster = [(price, ts)]
 
         if len(current_cluster) >= 2:
-            cluster_price = sum(current_cluster) / len(current_cluster)
-            avg_distance = sum(abs(p - cluster_price) for p in current_cluster) / len(current_cluster)
-            cluster_std = np.std(current_cluster) if len(current_cluster) > 1 else 0
-            clusters.append((cluster_price, len(current_cluster), avg_distance, cluster_std))
+            cluster_prices = [p for p, _ in current_cluster]
+            cluster_times = [ts for _, ts in current_cluster]
+            cluster_price = sum(cluster_prices) / len(cluster_prices)
+            avg_distance = sum(abs(p - cluster_price) for p in cluster_prices) / len(cluster_prices)
+            cluster_std = np.std(cluster_prices) if len(cluster_prices) > 1 else 0
+            last_time = max(cluster_times)
+            clusters.append((cluster_price, len(current_cluster), avg_distance, cluster_std, last_time))
 
+        # Фильтруем слишком близкие кластеры
         filtered_clusters = []
-        for i, (price1, count1, avg_dist1, std1) in enumerate(clusters):
+        for price1, count1, avg_dist1, std1, last_time1 in clusters:
             too_close = False
-            for j, (price2, count2, avg_dist2, std2) in enumerate(filtered_clusters):
+            for i, (price2, count2, avg_dist2, std2, last_time2) in enumerate(filtered_clusters):
                 if abs(price1 - price2) / price2 < self.min_levels_distance:
                     too_close = True
+                    # Если текущий кластер сильнее, заменяем
                     if count1 > count2 or std1 < std2:
-                        filtered_clusters[j] = (price1, count1, avg_dist1, std1)
+                        filtered_clusters[i] = (price1, count1, avg_dist1, std1, last_time1)
                     break
             if not too_close:
-                filtered_clusters.append((price1, count1, avg_dist1, std1))
+                filtered_clusters.append((price1, count1, avg_dist1, std1, last_time1))
 
         return filtered_clusters
 

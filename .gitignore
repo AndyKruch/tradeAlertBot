@@ -20,3 +20,6 @@ __pycache__/
 # Логи
 *.log
 *.csv
+
+# Список инструментов
+instruments.py

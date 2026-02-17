@@ -57,7 +57,7 @@ class AlertSystem:
             elif interval == CandleInterval.CANDLE_INTERVAL_15_MIN:
                 from_time = to_time - timedelta(hours=48)
             elif interval == CandleInterval.CANDLE_INTERVAL_HOUR:
-                from_time = to_time - timedelta(days=5)
+                from_time = to_time - timedelta(days=10)
             else:
                 from_time = to_time - timedelta(days=1)
 
@@ -86,7 +86,7 @@ class AlertSystem:
                 try:
                     candles_5min = self._get_candles(client, figi, CandleInterval.CANDLE_INTERVAL_5_MIN, 288)
                     candles_15min = self._get_candles(client, figi, CandleInterval.CANDLE_INTERVAL_15_MIN, 100)
-                    candles_1hour = self._get_candles(client, figi, CandleInterval.CANDLE_INTERVAL_HOUR, 50)
+                    candles_1hour = self._get_candles(client, figi, CandleInterval.CANDLE_INTERVAL_HOUR, 70)
 
                     all_candles = []
                     if candles_1hour:
@@ -368,27 +368,27 @@ class AlertSystem:
 
         await self._log_signal(signal)
 
-    async def _log_signal(self, signal: TradingSignal):
-        log_entry = (
-            f"{signal.timestamp.isoformat()},"
-            f"{signal.ticker},"
-            f"{signal.signal_type.value},"
-            f"{signal.current_price:.2f},"
-            f"{signal.level_price if signal.level_price is not None else ''},"
-            f"{signal.candle_open if signal.candle_open is not None else ''},"
-            f"{signal.candle_close if signal.candle_close is not None else ''},"
-            f"{signal.volume if signal.volume is not None else ''},"
-            f"{signal.confidence:.3f},"
-            f"\"{signal.reason}\"\n"
-        )
-
-        try:
-            with open("breakout_signals.csv", "a") as f:
-                if f.tell() == 0:
-                    f.write("timestamp,ticker,signal,price,level,open,close,volume,confidence,reason\n")
-                f.write(log_entry)
-        except Exception as e:
-            print(f"Ошибка при записи в лог: {e}")
+    # async def _log_signal(self, signal: TradingSignal):
+    #     log_entry = (
+    #         f"{signal.timestamp.isoformat()},"
+    #         f"{signal.ticker},"
+    #         f"{signal.signal_type.value},"
+    #         f"{signal.current_price:.2f},"
+    #         f"{signal.level_price if signal.level_price is not None else ''},"
+    #         f"{signal.candle_open if signal.candle_open is not None else ''},"
+    #         f"{signal.candle_close if signal.candle_close is not None else ''},"
+    #         f"{signal.volume if signal.volume is not None else ''},"
+    #         f"{signal.confidence:.3f},"
+    #         f"\"{signal.reason}\"\n"
+    #     )
+    #
+    #     try:
+    #         with open("breakout_signals.csv", "a") as f:
+    #             if f.tell() == 0:
+    #                 f.write("timestamp,ticker,signal,price,level,open,close,volume,confidence,reason\n")
+    #             f.write(log_entry)
+    #     except Exception as e:
+    #         print(f"Ошибка при записи в лог: {e}")
 
     def print_stats(self):
         print(f"\n{'=' * 80}")
