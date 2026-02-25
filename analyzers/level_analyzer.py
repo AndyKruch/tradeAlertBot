@@ -37,7 +37,7 @@ class LevelAnalyzer:
             level = PriceLevel(
                 price=cluster_price,
                 strength=strength,
-                time_frame="5min",
+                time_frame="15min",
                 touches=count,
                 is_fresh=True,
                 created_time=last_time,  # используем реальное время последнего экстремума в кластере

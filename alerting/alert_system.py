@@ -58,6 +58,8 @@ class AlertSystem:
                 from_time = to_time - timedelta(hours=48)
             elif interval == CandleInterval.CANDLE_INTERVAL_HOUR:
                 from_time = to_time - timedelta(days=10)
+            elif interval == CandleInterval.CANDLE_INTERVAL_DAY:
+                from_time = to_time - timedelta(days=10)
             else:
                 from_time = to_time - timedelta(days=1)
 
@@ -84,17 +86,20 @@ class AlertSystem:
                 print(f"   Загрузка данных для {ticker}...")
 
                 try:
-                    candles_5min = self._get_candles(client, figi, CandleInterval.CANDLE_INTERVAL_5_MIN, 288)
+                    # candles_5min = self._get_candles(client, figi, CandleInterval.CANDLE_INTERVAL_5_MIN, 288)
                     candles_15min = self._get_candles(client, figi, CandleInterval.CANDLE_INTERVAL_15_MIN, 100)
                     candles_1hour = self._get_candles(client, figi, CandleInterval.CANDLE_INTERVAL_HOUR, 70)
+                    candles_1day = self._get_candles(client, figi, CandleInterval.CANDLE_INTERVAL_DAY, 10)
 
                     all_candles = []
+                    if candles_1day:
+                        all_candles.extend(candles_1day)
                     if candles_1hour:
                         all_candles.extend(candles_1hour)
                     if candles_15min:
                         all_candles.extend(candles_15min)
-                    if candles_5min:
-                        all_candles.extend(candles_5min)
+                    # if candles_5min:
+                    #     all_candles.extend(candles_5min)
 
                     all_candles.sort(key=lambda x: x['time'])
 
@@ -366,7 +371,7 @@ class AlertSystem:
         print(f"{color}📝 {signal.reason}{reset_color}")
         print(f"{'═' * 80}")
 
-        await self._log_signal(signal)
+        # await self._log_signal(signal)
 
     # async def _log_signal(self, signal: TradingSignal):
     #     log_entry = (
