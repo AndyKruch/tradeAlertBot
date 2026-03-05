@@ -10,6 +10,7 @@ from models import TradingSignal, SignalType
 from analyzers import LevelAnalyzer, BreakoutAnalyzer
 from services import MarketDataStreamService
 from utils.converters import candle_to_dict
+from trading.paper_trading import PaperTradingEngine
 import config
 
 
@@ -37,6 +38,12 @@ class AlertSystem:
 
         self.level_update_thread = None
         self.level_update_interval = config.LEVEL_UPDATE_INTERVAL_SECONDS
+
+        self.paper_trading = PaperTradingEngine(
+            breakout_analyzer=self.breakout_analyzer,
+            contracts=config.PAPER_TRADING_CONTRACTS,
+            tp_points=config.PAPER_TRADING_TAKE_PROFIT_POINTS
+        )
 
     def initialize(self, instruments: List[Dict[str, str]]):
         self.instruments = instruments
@@ -239,6 +246,8 @@ class AlertSystem:
             supports, resistances = self.level_analyzer.find_support_resistance_levels(list(history), current_price)
             self.breakout_analyzer.update_levels(figi, supports, resistances, current_price)
 
+            self.paper_trading.on_levels_updated(figi)  # уведомляем engine
+
             monitor = self.breakout_analyzer.breakout_monitors.get(figi)
             if not monitor:
                 continue
@@ -301,6 +310,9 @@ class AlertSystem:
         self.last_candles[figi] = candle_dict
 
         signals = self.breakout_analyzer.process_candle(candle)
+
+        # Передаём свечу и сигналы в paper trading
+        self.paper_trading.on_candle(candle_dict, signals, figi)
 
         for signal in signals:
             self.signals_count += 1
