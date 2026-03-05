@@ -24,7 +24,7 @@ class MarketDataStreamService:
                     stream.candles.subscribe([
                         CandleInstrument(
                             figi=figi,
-                            interval=SubscriptionInterval.SUBSCRIPTION_INTERVAL_FIFTEEN_MINUTES
+                            interval=SubscriptionInterval.SUBSCRIPTION_INTERVAL_ONE_MINUTE
                         )
                         for figi in figies
                     ])

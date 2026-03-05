@@ -10,3 +10,5 @@ numpy>=1.21.0
 
 --extra-index-url https://opensource.tbank.ru/api/v4/projects/238/packages/pypi/simple
 t-tech-investments>=0.2.0
+pandas~=3.0.1
+backtesting~=0.6.5

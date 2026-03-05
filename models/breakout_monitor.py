@@ -21,7 +21,7 @@ class BreakoutMonitor:
     min_candle_size: float = 0.001  # Минимальный размер свечи (0.1%)
     confirmation_period: int = 2  # Период подтверждения в свечах
     max_level_age_hours: int = 24  # Максимальный возраст уровня в часах
-    price_range_percentage: float = 5.0  # Диапазон цены для актуальных уровней (в %)
+    price_range_percentage: float = 20.0  # Диапазон цены для актуальных уровней (в %)
     merge_threshold: float = 0.002  # Порог объединения близких уровней (0.2%)
     min_level_strength: float = 0.6  # Минимальная сила уровня для мониторинга
 
@@ -29,7 +29,7 @@ class BreakoutMonitor:
         self.level_cluster = PriceLevelCluster(merge_threshold=self.merge_threshold)
 
     def add_levels(self, supports: List[PriceLevel], resistances: List[PriceLevel], current_price: float):
-        """Добавляет новые уровни для мониторинга, объединяя близкие, с учётом направления"""
+        """Добавляет новые уровни для мониторинга, объединяя близкие, и оставляет только ближайшие."""
         current_time = datetime.now(timezone.utc)
 
         # Фильтруем устаревшие уровни
@@ -38,14 +38,13 @@ class BreakoutMonitor:
         # Диапазон цены для актуальных уровней (в абсолютных единицах)
         price_range = current_price * (self.price_range_percentage / 100.0)
 
-        # Допуск для учёта небольших отклонений (например, цена чуть выше поддержки)
+        # Допуск для учёта небольших отклонений
         epsilon = 0.001  # 0.1%
 
         # Фильтруем поддержки: должны быть НИЖЕ или равны текущей цене (с учётом epsilon)
         filtered_supports = []
         for s in supports:
             if s.strength >= self.min_level_strength:
-                # Поддержка не выше current_price + epsilon
                 if s.price <= current_price * (1 + epsilon):
                     if abs(s.price - current_price) <= price_range:
                         filtered_supports.append(s)
@@ -54,7 +53,6 @@ class BreakoutMonitor:
         filtered_resistances = []
         for r in resistances:
             if r.strength >= self.min_level_strength:
-                # Сопротивление не ниже current_price - epsilon
                 if r.price >= current_price * (1 - epsilon):
                     if abs(r.price - current_price) <= price_range:
                         filtered_resistances.append(r)
@@ -71,13 +69,33 @@ class BreakoutMonitor:
         for new_resistance in clustered_resistances:
             self._merge_or_add_level(self.active_resistance_levels, new_resistance, current_time)
 
-        # Сортируем уровни по силе
+        # --- НОВЫЙ БЛОК: оставляем только ближайшие уровни ---
+        # Поддержки: выбираем самую высокую цену среди нижележащих
+        if self.active_support_levels:
+            valid_supports = [l for l in self.active_support_levels if l.price < current_price]
+            if valid_supports:
+                closest_support = max(valid_supports, key=lambda l: l.price)
+                self.active_support_levels = [closest_support]
+            else:
+                self.active_support_levels = []
+        else:
+            self.active_support_levels = []
+
+        # Сопротивления: выбираем самую низкую цену среди вышележащих
+        if self.active_resistance_levels:
+            valid_resistances = [l for l in self.active_resistance_levels if l.price > current_price]
+            if valid_resistances:
+                closest_resistance = min(valid_resistances, key=lambda l: l.price)
+                self.active_resistance_levels = [closest_resistance]
+            else:
+                self.active_resistance_levels = []
+        else:
+            self.active_resistance_levels = []
+        # --- КОНЕЦ НОВОГО БЛОКА ---
+
+        # Сортируем уровни по силе (для порядка)
         self.active_support_levels.sort(key=lambda x: x.strength, reverse=True)
         self.active_resistance_levels.sort(key=lambda x: x.strength, reverse=True)
-
-        # Ограничиваем количество уровней (не более 5 каждого типа)
-        self.active_support_levels = self.active_support_levels[:5]
-        self.active_resistance_levels = self.active_resistance_levels[:5]
 
     def _merge_or_add_level(self, existing_levels: List[PriceLevel], new_level: PriceLevel, current_time: datetime):
         """Объединяет близкие уровни или добавляет новый"""

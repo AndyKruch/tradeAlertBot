@@ -23,7 +23,7 @@ class AlertSystem:
         self.level_analyzer = LevelAnalyzer()
         self.stream_service = MarketDataStreamService(token, app_name)
 
-        self.candle_history: Dict[str, Deque[Dict]] = defaultdict(lambda: deque(maxlen=500))
+        self.candle_history: Dict[str, Deque[Dict]] = defaultdict(lambda: deque(maxlen=1000))
         self.last_candles: Dict[str, Optional[Dict]] = {}
         self.instruments: List[Dict[str, str]] = []
 
@@ -51,7 +51,9 @@ class AlertSystem:
         try:
             to_time = datetime.now(timezone.utc)
             if interval == CandleInterval.CANDLE_INTERVAL_1_MIN:
-                from_time = to_time - timedelta(hours=48)
+                from_time = to_time - timedelta(hours=35)
+            elif interval == CandleInterval.CANDLE_INTERVAL_3_MIN:
+                from_time = to_time - timedelta(hours=35)
             elif interval == CandleInterval.CANDLE_INTERVAL_5_MIN:
                 from_time = to_time - timedelta(hours=48)
             elif interval == CandleInterval.CANDLE_INTERVAL_15_MIN:
@@ -59,9 +61,9 @@ class AlertSystem:
             elif interval == CandleInterval.CANDLE_INTERVAL_HOUR:
                 from_time = to_time - timedelta(days=10)
             elif interval == CandleInterval.CANDLE_INTERVAL_DAY:
-                from_time = to_time - timedelta(days=10)
+                from_time = to_time - timedelta(days=5)
             else:
-                from_time = to_time - timedelta(days=1)
+                from_time = to_time - timedelta(days=3)
 
             response = client.market_data.get_candles(
                 figi=figi,
@@ -86,25 +88,31 @@ class AlertSystem:
                 print(f"   Загрузка данных для {ticker}...")
 
                 try:
-                    # candles_5min = self._get_candles(client, figi, CandleInterval.CANDLE_INTERVAL_5_MIN, 288)
-                    candles_15min = self._get_candles(client, figi, CandleInterval.CANDLE_INTERVAL_15_MIN, 100)
-                    candles_1hour = self._get_candles(client, figi, CandleInterval.CANDLE_INTERVAL_HOUR, 70)
-                    candles_1day = self._get_candles(client, figi, CandleInterval.CANDLE_INTERVAL_DAY, 10)
+                    candles_1min = self._get_candles(client, figi, CandleInterval.CANDLE_INTERVAL_1_MIN, 500)
+                    # candles_3min = self._get_candles(client, figi, CandleInterval.CANDLE_INTERVAL_3_MIN, 961)
+                    # candles_5min = self._get_candles(client, figi, CandleInterval.CANDLE_INTERVAL_5_MIN, 560)
+                    # candles_15min = self._get_candles(client, figi, CandleInterval.CANDLE_INTERVAL_15_MIN, 10)
+                    # candles_1hour = self._get_candles(client, figi, CandleInterval.CANDLE_INTERVAL_HOUR, 240)
+                    candles_1day = self._get_candles(client, figi, CandleInterval.CANDLE_INTERVAL_DAY, 5)
 
                     all_candles = []
-                    if candles_1day:
-                        all_candles.extend(candles_1day)
-                    if candles_1hour:
-                        all_candles.extend(candles_1hour)
-                    if candles_15min:
-                        all_candles.extend(candles_15min)
+                    # if candles_1day:
+                    #     all_candles.extend(candles_1day)
+                    # if candles_1hour:
+                    #     all_candles.extend(candles_1hour)
+                    # if candles_15min:
+                    #     all_candles.extend(candles_15min)
                     # if candles_5min:
                     #     all_candles.extend(candles_5min)
+                    # if candles_3min:
+                    #     all_candles.extend(candles_3min)
+                    if candles_1min:
+                        all_candles.extend(candles_1min)
 
                     all_candles.sort(key=lambda x: x['time'])
 
                     if all_candles:
-                        self.candle_history[figi] = deque(all_candles, maxlen=500)
+                        self.candle_history[figi] = deque(all_candles, maxlen=1000)
 
                         # Инициализируем анализатор движения историческими данными
                         for hist_candle in all_candles:
@@ -138,14 +146,16 @@ class AlertSystem:
                 stats = monitor.get_level_statistics()
                 levels_info = monitor.get_levels_info()
                 ticker = monitor.ticker
-                print(f"   📊 {ticker}: найдено {stats['active_supports']} поддержек, {stats['active_resistances']} сопротивлений")
+                print(
+                    f"   📊 {ticker}: найдено {stats['active_supports']} поддержек, {stats['active_resistances']} сопротивлений")
 
                 if levels_info['supports']:
                     print(f"     Поддержки:")
                     for sup in levels_info['supports']:
                         age_str = self._format_age(sup['age_hours'])
                         fresh_mark = " 🆕" if sup['is_fresh'] else ""
-                        print(f"       - {sup['price']:.3f} (сила: {sup['strength']:.2f}, возраст: {age_str}, тестов: {sup['times_tested']}){fresh_mark}")
+                        print(
+                            f"       - {sup['price']:.3f} (сила: {sup['strength']:.2f}, возраст: {age_str}, тестов: {sup['times_tested']}){fresh_mark}")
                 else:
                     print(f"     Поддержки: нет")
 
@@ -154,16 +164,20 @@ class AlertSystem:
                     for res in levels_info['resistances']:
                         age_str = self._format_age(res['age_hours'])
                         fresh_mark = " 🆕" if res['is_fresh'] else ""
-                        print(f"       - {res['price']:.3f} (сила: {res['strength']:.2f}, возраст: {age_str}, тестов: {res['times_tested']}){fresh_mark}")
+                        print(
+                            f"       - {res['price']:.3f} (сила: {res['strength']:.2f}, возраст: {age_str}, тестов: {res['times_tested']}){fresh_mark}")
                 else:
                     print(f"     Сопротивления: нет")
 
                 # Вывод среднего дневного диапазона
-                avg_daily_range_pct = self.breakout_analyzer.movement_analyzer.get_avg_daily_range_pct(figi, current_price)
+                avg_daily_range_pct = self.breakout_analyzer.movement_analyzer.get_avg_daily_range_pct(figi,
+                                                                                                       current_price)
                 if avg_daily_range_pct is not None:
-                    print(f"     📊 Средний дневной диапазон (последние {config.MOVEMENT_LOOKBACK_DAYS} дн): {avg_daily_range_pct:.2f}%")
+                    print(
+                        f"     📊 Средний дневной диапазон (последние {config.MOVEMENT_LOOKBACK_DAYS} дн): {avg_daily_range_pct:.2f}%")
                 else:
-                    print(f"     📊 Средний дневной диапазон: недостаточно данных (нужно минимум {config.MOVEMENT_LOOKBACK_DAYS} дней)")
+                    print(
+                        f"     📊 Средний дневной диапазон: недостаточно данных (нужно минимум {config.MOVEMENT_LOOKBACK_DAYS} дней)")
 
                 for level in monitor.active_support_levels:
                     level.is_fresh = False
@@ -240,7 +254,8 @@ class AlertSystem:
                 for sup in levels_info['supports']:
                     age_str = self._format_age(sup['age_hours'])
                     fresh_mark = " 🆕" if sup['is_fresh'] else ""
-                    print(f"       - {sup['price']:.3f} (сила: {sup['strength']:.2f}, возраст: {age_str}, тестов: {sup['times_tested']}){fresh_mark}")
+                    print(
+                        f"       - {sup['price']:.3f} (сила: {sup['strength']:.2f}, возраст: {age_str}, тестов: {sup['times_tested']}){fresh_mark}")
             else:
                 print(f"     Поддержки: нет")
 
@@ -249,16 +264,19 @@ class AlertSystem:
                 for res in levels_info['resistances']:
                     age_str = self._format_age(res['age_hours'])
                     fresh_mark = " 🆕" if res['is_fresh'] else ""
-                    print(f"       - {res['price']:.3f} (сила: {res['strength']:.2f}, возраст: {age_str}, тестов: {res['times_tested']}){fresh_mark}")
+                    print(
+                        f"       - {res['price']:.3f} (сила: {res['strength']:.2f}, возраст: {age_str}, тестов: {res['times_tested']}){fresh_mark}")
             else:
                 print(f"     Сопротивления: нет")
 
             # Вывод среднего дневного диапазона
             avg_daily_range_pct = self.breakout_analyzer.movement_analyzer.get_avg_daily_range_pct(figi, current_price)
             if avg_daily_range_pct is not None:
-                print(f"     📊 Средний дневной диапазон (последние {config.MOVEMENT_LOOKBACK_DAYS} дн): {avg_daily_range_pct:.2f}%")
+                print(
+                    f"     📊 Средний дневной диапазон (последние {config.MOVEMENT_LOOKBACK_DAYS} дн): {avg_daily_range_pct:.2f}%")
             else:
-                print(f"     📊 Средний дневной диапазон: недостаточно данных (нужно минимум {config.MOVEMENT_LOOKBACK_DAYS} дней)")
+                print(
+                    f"     📊 Средний дневной диапазон: недостаточно данных (нужно минимум {config.MOVEMENT_LOOKBACK_DAYS} дней)")
 
             for level in monitor.active_support_levels:
                 level.is_fresh = False
@@ -356,7 +374,8 @@ class AlertSystem:
 
         # Блок для торговых сигналов (entry_price, stop_loss, take_profit, risk_reward)
         if signal.entry_price is not None and signal.stop_loss is not None and signal.take_profit is not None:
-            print(f"{color}🎯 Вход: {signal.entry_price:.2f} | Стоп: {signal.stop_loss:.2f} | Тейк: {signal.take_profit:.2f}{reset_color}")
+            print(
+                f"{color}🎯 Вход: {signal.entry_price:.2f} | Стоп: {signal.stop_loss:.2f} | Тейк: {signal.take_profit:.2f}{reset_color}")
             if signal.risk_reward is not None and signal.risk_reward > 0:
                 print(f"{color}⚖️  Риск/Прибыль: 1:{signal.risk_reward:.1f}{reset_color}")
 

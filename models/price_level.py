@@ -102,7 +102,7 @@ class PriceLevelCluster:
         filtered_levels = []
         for level in merged_levels:
             price_diff_pct = abs(level.price - current_price) / current_price * 100 if current_price > 0 else 0
-            if price_diff_pct > 0.5:  # Только уровни, отстоящие от текущей цены более чем на 0.5%
+            if price_diff_pct > 0.005:  # Только уровни, отстоящие от текущей цены более чем на 0.5%
                 filtered_levels.append(level)
 
         return filtered_levels

@@ -14,12 +14,30 @@ class LevelAnalyzer:
 
     def find_support_resistance_levels(self, candles: List[Dict],
                                        current_price: float) -> Tuple[List[PriceLevel], List[PriceLevel]]:
-        """Находит уровни поддержки и сопротивления"""
         if len(candles) < 20:
             return [], []
 
         support_levels = self._find_levels(candles, 'low', 'support', current_price)
         resistance_levels = self._find_levels(candles, 'high', 'resistance', current_price)
+
+        # Фильтр поддержек: только уровни ниже текущей цены
+        supports_below = [level for level in support_levels if level.price < current_price]
+        if supports_below:
+            # Ближайший снизу = максимальная цена среди нижележащих
+            closest_support = max(supports_below, key=lambda level: level.price)
+            support_levels = [closest_support]
+        else:
+            support_levels = []
+
+        # Фильтр сопротивлений: только уровни выше текущей цены
+        resistances_above = [level for level in resistance_levels if level.price > current_price]
+        if resistances_above:
+            # Ближайший сверху = минимальная цена среди вышележащих
+            closest_resistance = min(resistances_above, key=lambda level: level.price)
+            resistance_levels = [closest_resistance]
+        else:
+            resistance_levels = []
+
         return support_levels, resistance_levels
 
     def _find_levels(self, candles: List[Dict], price_key: str,
@@ -37,7 +55,7 @@ class LevelAnalyzer:
             level = PriceLevel(
                 price=cluster_price,
                 strength=strength,
-                time_frame="15min",
+                time_frame="1min",
                 touches=count,
                 is_fresh=True,
                 created_time=last_time,  # используем реальное время последнего экстремума в кластере
@@ -80,7 +98,7 @@ class LevelAnalyzer:
         filtered = []
         for price, ts in extremums:
             distance_pct = abs(price - current_price) / current_price * 100 if current_price > 0 else 100
-            if distance_pct < 10:
+            if distance_pct < 15:
                 filtered.append((price, ts))
 
         if not filtered:
