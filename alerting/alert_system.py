@@ -11,13 +11,14 @@ from analyzers import LevelAnalyzer, BreakoutAnalyzer
 from services import MarketDataStreamService
 from utils.converters import candle_to_dict
 from trading.paper_trading import PaperTradingEngine
+from trading.trade_logger import TradeLogger
 import config
 
 
 class AlertSystem:
     """Система алертов с детектированием пробоев и сильных движений"""
 
-    def __init__(self, token: str, app_name: str = config.APP_NAME):
+    def __init__(self, token: str, app_name: str = config.APP_NAME, logger: TradeLogger = None):
         self.token = token
         self.app_name = app_name
         self.breakout_analyzer = BreakoutAnalyzer(token)
@@ -39,11 +40,16 @@ class AlertSystem:
         self.level_update_thread = None
         self.level_update_interval = config.LEVEL_UPDATE_INTERVAL_SECONDS
 
+        self.logger = logger or TradeLogger()  # если не передан, создаём свой
+
         self.paper_trading = PaperTradingEngine(
             breakout_analyzer=self.breakout_analyzer,
+            logger=self.logger,
             contracts=config.PAPER_TRADING_CONTRACTS,
             tp_points=config.PAPER_TRADING_TAKE_PROFIT_POINTS
         )
+
+        self.logger.start()
 
     def initialize(self, instruments: List[Dict[str, str]]):
         self.instruments = instruments

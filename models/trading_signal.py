@@ -35,7 +35,7 @@ class TradingSignal:
     take_profit: Optional[float] = None
     confidence: float = 0.0
     reason: str = ""
-    timeframe: str = "5min"
+    timeframe: str = "1min"
     risk_reward: float = 0.0
     level_price: Optional[float] = None  # Для пробоев - цена уровня
     candle_open: Optional[float] = None  # Цена открытия свечи
